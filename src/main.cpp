@@ -44,12 +44,15 @@ String header;
 //Auxiliares estados leds
 String led1Output = "off";
 String led2Output = "off";
+String message = "";
+int countVentilador = 0;
 
 //Asignacion pines
 const int led1 = 4;
 const int led2 = 5;
 const int DhtPin = 2;
 const int sensorSuelo = 23;
+const int rele = 9;
 
 //Tiempo actual
 unsigned long tiempoActual = millis();
@@ -64,11 +67,12 @@ WiFiClient client;
 void inicializar(){
   pinMode(led1, OUTPUT);
   pinMode(led2, OUTPUT);
+  pinMode(rele, OUTPUT);
 
   //Estado inicial
   digitalWrite(led1, LOW);
   digitalWrite(led2, LOW);
-
+  digitalWrite(rele, HIGH);
   //config firebase
   config.api_key = API_KEY;
   config.database_url = DATABASE_URL;
@@ -108,6 +112,13 @@ void lecturaSuelo(){
   float sensorValor = analogRead(sensorSuelo);
   Serial.print("Humedad de suelo -> ");
   Serial.println(sensorValor);
+  if(sensorValor >= 0 && sensorValor <= 300){
+    Serial.println("Sensor en suelo seco");
+  }else if(sensorValor > 300 && sensorValor <= 700){
+    Serial.println("Sensor en suelo humedo");
+  }else if(sensorValor > 700){
+    Serial.println("Sensor en agua");
+  }
 }
 
 void setup() {
@@ -120,7 +131,7 @@ void setup() {
 }
 
 void loop() {
-  
+  delay(500);
   //Cliente
   client = server.available();
   if(client){
@@ -162,13 +173,28 @@ void loop() {
             //Temperatura y humedad
             float t = dht.readTemperature();
             Serial.println("Temperatura-> " + int(t));
-            ThingSpeak.setField(1, t);
+            ThingSpeak.setField(1, t); // envio a thingspeak temperatura
+
+            //Control temperatura
+            if(t >= 29.2){
+                countVentilador += 1;
+                message = "Sistema de refigeración encendido";
+                Serial.println("Sistema de refigeración encendido");
+                digitalWrite(rele, LOW);
+            }else{
+                message = "Sistema de refigeración apagado";
+                Serial.println("Sistema de refigeración apagado");
+                digitalWrite(rele, HIGH);
+            }
+            //Fin control de temperatura
+
             float h = dht.readHumidity();
             Serial.println("Humedad-> " +int(h));
-            ThingSpeak.setField(2, h);
+            ThingSpeak.setField(2, h); // envio a thingspeak humedad
 
             //funcion suelo
             lecturaSuelo();
+            ThingSpeak.setField(3, sensorSuelo); // envio a thingspeak humedad suelo
 
             //Html pagina
             client.println("<!DOCTYPE html><html>");
@@ -187,7 +213,7 @@ void loop() {
                 //Tarjeta de temperatura
                 client.println("<div class=\"col-md-6\">");
                   client.println("<div class=\"card mx-auto m3 shadow-sm\">");
-                    client.println("<div class=\"card-header\"><i class=\"fas fa-thermometer-full></i> Temperatura");
+                    client.println("<div class=\"card-header\"><i class=\"fas fa-thermometer-full\"></i> Temperatura");
                     client.println("<div class=\"card-body\">");
                       client.println("<h2 class=\"text-center fw-bold\">");client.println(t);client.println("</h2>");
                       client.println("<div class=\"d-flex justify-content-center\">");
@@ -199,9 +225,21 @@ void loop() {
                 //Tarjeta de humedad
                 client.println("<div class=\"col-md-6\">");
                   client.println("<div class=\"card mx-auto m3 shadow-sm\">");
-                    client.println("<div class=\"card-header\"><i class=\"fas fa-thermometer-full></i> Humedad");
+                    client.println("<div class=\"card-header\"><i class=\"fas fa-thermometer-full\"></i> Humedad");
                     client.println("<div class=\"card-body\">");
                       client.println("<h2 class=\"text-center fw-bold\">");client.println(h);client.println("</h2>");
+                      client.println("<div class=\"d-flex justify-content-center\">");
+                        client.println("<a class=\"btn btn-primary btn-sm\" href=\"https://thingspeak.com/channels/1580456/private_show\" targer=\"__blank\">Ver grafico</a>");
+                      client.println("</div>");
+                    client.println("</div>");
+                  client.println("</div>");
+                client.println("</div>");
+                //Tarjeta de humedad de suelo
+                client.println("<div class=\"col-md-6\">");
+                  client.println("<div class=\"card mx-auto m3 shadow-sm\">");
+                    client.println("<div class=\"card-header\"><i class=\"fas fa-paint-roller\"></i> Humedad de suelo");
+                    client.println("<div class=\"card-body\">");
+                      client.println("<h2 class=\"text-center fw-bold\">");client.println(sensorSuelo);client.println("</h2>");
                       client.println("<div class=\"d-flex justify-content-center\">");
                         client.println("<a class=\"btn btn-primary btn-sm\" href=\"https://thingspeak.com/channels/1580456/private_show\" targer=\"__blank\">Ver grafico</a>");
                       client.println("</div>");
@@ -227,6 +265,7 @@ void loop() {
     Serial.println("Cliente desconectado");
     Serial.println("");
   }
+  delay(5000);
 }
 
 void correo(String message){
@@ -234,7 +273,7 @@ void correo(String message){
   datosSMTP.setSender("CASA /ESP32 ", loginEmail);
   datosSMTP.setPriority("Normal");
   datosSMTP.setSubject("Estado AIRE ACONDICIONADO");
-  datosSMTP.setMessage("Hola soy ESP32/ CASA, envio estado del aire acondicionado", false);
+  datosSMTP.setMessage("Hola soy ESP32/ CASA, aire " + message, false);
   datosSMTP.addRecipient(accountEmail);
   if(!MailClient.sendMail(datosSMTP)){
     Serial.println("Error enviando el correo, " + MailClient.smtpErrorReason());
