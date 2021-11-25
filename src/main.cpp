@@ -31,10 +31,10 @@ const char* pass = "pass";
 
 //Detalles correo
 const char* host = "smtp.gmail.com";
-const char* loginEmail = "maicolh474@gmail.com";
-const char* loginPassword = "maROHer142020";
+const char* loginEmail = "";
+const char* loginPassword = "";
 const int port = 465;
-const char* accountEmail = "soymichaelfb2@gmail.com";
+const char* accountEmail = "";
 
 WiFiServer server(80);
 
